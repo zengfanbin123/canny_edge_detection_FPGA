@@ -17,6 +17,7 @@ module PADDING
 	output done
 );
 
+	//calculate the  data bits 
 	function integer clogb2 (input integer bit_depth);
 	begin
 		for(clogb2=0; bit_depth>0; clogb2=clogb2+1)

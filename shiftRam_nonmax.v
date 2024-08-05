@@ -1,51 +1,70 @@
 module Shift_RAM_3X3_NO_MAX#(
-  	parameter WIDTH = 512,
-	parameter DEPTH = 636,
+  	parameter WIDTH = 640,
+	parameter DEPTH = 512,
     parameter FIFO_SUM = 2,
-    parameter KERNEL_SIZE = 3
+    parameter KERNEL_SIZE = 3,
+	parameter DATA_WIDTH = 26
 )
 (
 	//global signals
 	input 					clk,						
 	input 					rst_n,							
 	//Image data prepred to be processd
-	input 					per_clken,//Prepared Image data output/capture enable clock
-	input 			[25:0]	per_img_Y,//Prepared Image brightness input
+	input 					start,
+	input 					data_en,//Prepared Image data output/capture enable clock
+	input 			[DATA_WIDTH - 1:0]	per_img_Y,//Prepared Image brightness input
 	//Image data has been processd
-	output					matrix_clken,	//Prepared Image data output/capture enable clock	
-	//output					data_valid,
-	output 	reg 	[25:0]	matrix_p11,						
-	output 	reg		[25:0]	matrix_p12,						
-	output 	reg		[25:0]	matrix_p13,	//3X3 Matrix output
-	output 	reg		[25:0]	matrix_p21,						
-	output 	reg		[25:0]	matrix_p22,						
-	output 	reg		[25:0]	matrix_p23,						
-	output 	reg		[25:0]	matrix_p31,						
-	output 	reg		[25:0]	matrix_p32,						
-	output 	reg		[25:0]	matrix_p33					
+	output					matrix_clken,	//Prepared Image data output/capture enable clock
+	output					data_valid,		//output data_valid
+	output 					ready_en,		//sign of output
+	output 	reg 	[DATA_WIDTH - 1:0]	matrix_p11,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p12,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p13,	//3X3 Matrix output
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p21,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p22,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p23,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p31,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p32,						
+	output 	reg		[DATA_WIDTH - 1:0]	matrix_p33					
     );
+
+
+//counts  input  pixel
+reg [19:0] count;
+always@ (posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		count <= 20'b0;
+	  end
+	else begin 
+		if(count == ((WIDTH - 2*(KERNEL_SIZE - 1)) * (DEPTH - 2*(KERNEL_SIZE - 1)) + 2  )) begin
+			count <= 20'b0;
+		end	
+		else if(data_en)begin 
+			count <= count + 1;
+    	end
+		else	
+		count <= count;
+	end
+end
 
 
 //----------------------------------------------
 //consume 1clk
-wire 	[25:0] 	row1_data;//frame data of the 1th row
-wire 	[25:0]	row2_data;//frame data of the 2th row
-reg 	[25:0] 	row3_data;//frame data of the 3th row
+wire 	[DATA_WIDTH - 1:0] 	row1_data;//frame data of the 1th row
+wire 	[DATA_WIDTH - 1:0]	row2_data;//frame data of the 2th row
+reg 	[DATA_WIDTH - 1:0] 	row3_data;//frame data of the 3th row
 
-wire readFIFO_en;
-wire [25:0] fifo_out_data;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
 		row3_data <= 26'b0;
 	else begin
-		if(readFIFO_en)
-			row3_data <= fifo_out_data;
+		if(start)
+			row3_data <= per_img_Y;
 		else
 			row3_data <= row3_data;
 		end
 end
 	
-
 
 //debug for data
 wire [1:0] direct1,direct2,direct3,direct4,direct5,direct6,direct7,direct8,direct9;
@@ -71,11 +90,11 @@ assign grad9 = {matrix_p33[23:0]};
 
 //----------------------------------------------------------
 //module of shift ram for row data
-wire	shift_clk_en = per_clken;
+wire	shift_clk_en = start;
 
 //Shift_RAM_3X3_16bit1
 // IP core : shift ram
-// width :26bits  depth: 508
+// width :26bits  depth: 512
 // initial value = 26'b0
 // synchronous setting : clear data
 shift_ram_508 u1_Shift_RAM_3X3_26bit (
@@ -101,64 +120,79 @@ shift_ram_508 u2_Shift_RAM_3X3_26bit (
 // 	else 
 // 		per_clken_r <= {per_clken_r[0], per_clken};	 
 // end
+
+//delay matrix shift sign 
+reg per_clken_r;
+always @(posedge clk or negedge rst_n)begin
+	if(!rst_n)
+		per_clken_r <= 1'b0;
+	else 
+		per_clken_r <=  start;	 
+end
  
 wire 	read_clken;
-assign read_clken  = per_clken?1:0;
+assign read_clken  = per_clken_r;
 
-//counts input fifo pixel
-reg [9:0] fifo_pixel;
+//count matrix_pixel output valid
+reg [9:0]  row;
 always@ (posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
-		fifo_pixel <= 20'b0;
+		row <= 10'b0;
 	  end
-	//Two adjacent input data are not zero
-	else if(fifo_pixel > 10'd510 )
-		fifo_pixel <= 10'd511;	
-	else if(per_clken   )begin 
-		fifo_pixel <= fifo_pixel + 1;
+	else if((row == WIDTH - 1))
+		row <= 10'b0;	
+	else if(matrix_clken)begin 
+		row <= row + 1;
 		//matrix_clken <= 1'b0;	 
     end
-end 
-assign readFIFO_en = fifo_pixel > 510 ?1:0;
-
-//count mnatrix out pixel
-reg [19:0] count;
-
-always@ (posedge clk or negedge rst_n) begin
-	if(!rst_n) begin
-		count <= 20'b0;
-	  end
-	//Two adjacent input data are not zero
-	else if((count == (WIDTH-4) * DEPTH ))
-		count <= 20'b0;	
-	else if(per_clken == 1 && readFIFO_en)begin 
-		count <= count + 1;
-		//matrix_clken <= 1'b0;	 
-    end
+	else	
+		row <= row;
 end
 
 
-assign 	matrix_clken = (count>(WIDTH-4)*FIFO_SUM+KERNEL_SIZE )?1:0;
+assign 	matrix_clken = (count>(WIDTH-2 * (KERNEL_SIZE - 1))*FIFO_SUM+KERNEL_SIZE )?1:0;
+assign  data_valid = (row > (WIDTH - KERNEL_SIZE *3  + 1 ))?1:0;
 
-wire empty,full;
+reg [1:0] delay_start;
+always @(posedge clk or negedge rst_n)begin
+	if(!rst_n)
+		delay_start <= 2'b0;
+	else 
+		delay_start <= {delay_start[0], start};	 
+end
+assign ready_en = delay_start[1];
 
 
-//fifo depth : 1024
-bufffer_fifo non_max_fifo (
-  .clk(clk),      // input wire clk
-  .srst(~rst_n),    // input wire srst
-  .din(per_img_Y),      // input wire [25 : 0] din
-  .wr_en(per_clken),  // input wire wr_en
-  .rd_en(readFIFO_en),  // input wire rd_en
-  .dout(fifo_out_data),    // output wire [25 : 0] dout
-  .full(full),    // output wire full
-  .empty(empty)  // output wire empty
-);
 
-	 
+// calculate the output matrix pixel row and col  
+// start counting from 0
+reg [9:0] cnt_row;      //row from 0 to 509  
+reg [9:0] cnt_col;      //col from 0 to 639
+always @(posedge clk or negedge rst_n ) begin
+    if(rst_n == 0) begin
+        cnt_col <= 10'b0;   
+    end     
+    else if(cnt_col == WIDTH - 1) begin 
+        cnt_col <= 10'b0;
+    end
+    else if(matrix_clken == 1 ) begin
+        cnt_col <= cnt_col + 1;        
+    end
+end
 
-//assign data_valid = ((cnt_row > WIDTH - KERNEL_SIZE)&&(matrix_clken==1)) ?0:1;	 
-
+always @(posedge clk or negedge rst_n ) begin
+    if(rst_n == 0) begin
+        cnt_row <= 10'b0;   
+    end     
+    else if(cnt_col == WIDTH - 1) begin 
+        cnt_row <=  cnt_row + 1;
+    end
+    else if((cnt_row == DEPTH) && (cnt_col == WIDTH - 1) )  begin
+        cnt_row <= 10'b0 ;        
+    end
+    else 
+        cnt_row <= cnt_row;
+end
 
 //---------------------------------------------------------------------
 /****************************************
@@ -176,7 +210,7 @@ always @(posedge clk or negedge rst_n)begin
         {matrix_p31, matrix_p32, matrix_p33} <= 78'h0;
 	end
 //	else if(read_frame_href)begin
-	else if(read_clken && per_clken)begin//shift_RAM data read clock enbale 
+	else if(read_clken )begin//shift_RAM data read clock enbale 
 			{matrix_p11, matrix_p12, matrix_p13} <= {matrix_p12, matrix_p13, row1_data};//1th shift input
 			{matrix_p21, matrix_p22, matrix_p23} <= {matrix_p22, matrix_p23, row2_data};//2th shift input 
 			{matrix_p31, matrix_p32, matrix_p33} <= {matrix_p32, matrix_p33, row3_data};//3th shift input 

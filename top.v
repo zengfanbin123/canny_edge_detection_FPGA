@@ -95,54 +95,126 @@ Shift_RAM_3X3_grad ram2(
 );
 
 wire [25:0]grad_data;
+wire grad_start_sync;
 Gradientfilter grad (
-    clk,rst_n,
-    grad_matrix_ready,
-    grad_valid,
-    grad_mat1,grad_mat2,grad_mat3,grad_mat4,grad_mat5,grad_mat6,grad_mat7,grad_mat8,grad_mat9,
-    grad_filter_ready,
-    grad_data
+    //input
+    .clk(clk),       
+    .rst_n(rst_n),     
+    .start(grad_ram_ready_sync),     
+    .data_valid(grad_valid),
+    .matrix_clken(grad_ram_matrix_ready),
+    
+    //output
+    .matrix_p11(grad_mat1),
+    .matrix_p12(grad_mat2),
+    .matrix_p13(grad_mat3),
+    .matrix_p21(grad_mat4),
+    .matrix_p22(grad_mat5),
+    .matrix_p23(grad_mat6),
+    .matrix_p31(grad_mat7),
+    .matrix_p32(grad_mat8),
+    .matrix_p33(grad_mat9),
+    .ready_sync( grad_start_sync),
+    .data_en(grad_filter_ready),   
+    .grad_square(grad_data)
    
 );
 
 wire[25:0] wire1,wire2,wire3,wire4,wire5,wire6,wire7,wire8,wire9;
-wire ram3_ready;
+wire ram3_matrix_ready;
 wire nomax_valid;
+wire nomax_ram_ready_sync;
 Shift_RAM_3X3_NO_MAX ram3(
-    clk,rst_n,
-    grad_filter_ready,grad_data,
-    ram3_ready,
-    //nomax_valid,
-    wire1,wire2,wire3,wire4,wire5,wire6,wire7,wire8,wire9
+    //input
+    .clk(clk),						
+    .rst_n(rst_n),					
+    .start(grad_start_sync),
+    .data_en(grad_filter_ready),
+    //26bits
+    .per_img_Y(grad_data),
+    //output
+    .matrix_clken(ram3_matrix_ready),
+    .data_valid(nomax_valid),
+    .ready_en(nomax_ram_ready_sync),
+    .matrix_p11(wire1),
+    .matrix_p12(wire2),
+    .matrix_p13(wire3),
+    .matrix_p21(wire4),
+    .matrix_p22(wire5),
+    .matrix_p23(wire6),
+    .matrix_p31(wire7),
+    .matrix_p32(wire8),
+    .matrix_p33(wire9)	
+
 );
 
 wire [15:0]  none_max_data;
 wire non_max_ready;
+wire non_max_start_sync;
 none_LocalMax_value max(
-    clk,rst_n,
-    ram3_ready,
-    //nomax_valid,
-    wire1,wire2,wire3,wire4,wire5,wire6,wire7,wire8,wire9,
-    non_max_ready,
-    none_max_data
+    .clk(clk),   
+    .rst_n(rst_n), 
+    .start(nomax_ram_ready_sync),   
+    .data_valid(nomax_valid),
+    .matrix_clken(ram3_matrix_ready),
+    .grad_p11(wire1),
+    .grad_p12(wire2),
+    .grad_p13(wire3),
+    .grad_p21(wire4),
+    .grad_p22(wire5),
+    .grad_p23(wire6),
+    .grad_p31(wire7),
+    .grad_p32(wire8),
+    .grad_p33(wire9),
+    .start_sync(non_max_start_sync),
+    .data_en(non_max_ready),
+    .out_data(none_max_data)
+
+   
 );
 
-wire max_ready;
-wire ram4_ready;
+wire ram4_matrix_ready;
+wire ram4_ready_sync;
+wire thresh_valid;
 wire [15:0] thresh_mat1,thresh_mat2,thresh_mat3,thresh_mat4,thresh_mat5,thresh_mat6,thresh_mat7,thresh_mat8,thresh_mat9;
 Shift_RAM_3X3_thresh ram4(
-    clk,rst_n,
-    non_max_ready,none_max_data,
-    ram4_ready,
-    //max_ready,
-    thresh_mat1,thresh_mat2,thresh_mat3,thresh_mat4,thresh_mat5,thresh_mat6,thresh_mat7,thresh_mat8,thresh_mat9
+    .clk(clk),						
+    .rst_n(rst_n),					
+    .start(non_max_start_sync),
+    .data_en(non_max_ready),
+    //26bits
+    .per_img_Y(none_max_data),
+    //output
+    .matrix_clken(ram4_matrix_ready),
+    .data_valid(thresh_valid),
+    .ready_en(ram4_ready_sync),
+    .matrix_p11(thresh_mat1),
+    .matrix_p12(thresh_mat2),
+    .matrix_p13(thresh_mat3),
+    .matrix_p21(thresh_mat4),
+    .matrix_p22(thresh_mat5),
+    .matrix_p23(thresh_mat6),
+    .matrix_p31(thresh_mat7),
+    .matrix_p32(thresh_mat8),
+    .matrix_p33(thresh_mat9)	
 );
 doublethresh thresh(
-    clk,rst_n,
-    ram4_ready,
-   // max_ready,
-    thresh_mat1,thresh_mat2,thresh_mat3,thresh_mat4,thresh_mat5,thresh_mat6,thresh_mat7,thresh_mat8,thresh_mat9,
-    out_data,
-    ready
+    .clk(clk),       //
+    .rst_n(rst_n),       
+    .start(ram4_ready_sync),       
+    .data_valid(thresh_valid),	
+    .matrix_clken(ram4_matrix_ready),
+    .matrix_p11(thresh_mat1),
+    .matrix_p12(thresh_mat2),
+    .matrix_p13(thresh_mat3),
+    .matrix_p21(thresh_mat4),
+    .matrix_p22(thresh_mat5),
+    .matrix_p23(thresh_mat6),
+    .matrix_p31(thresh_mat7),
+    .matrix_p32(thresh_mat8),
+    .matrix_p33(thresh_mat9),  
+    .data(out_data),
+    .ready(ready)
+    
 ); 
 endmodule

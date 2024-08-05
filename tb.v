@@ -1,4 +1,4 @@
-`timescale 1ns / 1ns
+`timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -41,22 +41,27 @@ $readmemh("E:/20231213_120326Raw.txt",data_mem);
 initial begin
     clk = 1'b1 ;
     rst_n = 1'b0 ;
-    flag = 1'b1;
+    flag = 1'b0;
     str1 = 321'b0;
-    #80
-    rst_n = 1'b1 ;
-    data_valid = 1'b1;
+    data = 16'b0;
+    #60
+    rst_n = 1'b1;
+    flag = 1'b1;
+ 
+    
+    
+    
 end
 
 always #10 begin
     clk = ~clk;
-    flag = ~flag;
+    //flag = ~flag;
 end
 
 
 initial begin 
     integer i;
-    #60 ;
+    #40 ;
     for(i = 0; i < 640*512; i = i+1)begin 
         #20
         data <= data_mem[i] ;
@@ -69,25 +74,25 @@ wire ready;
 wire [15:0] out_data;
 top test(
     clk,rst_n,
-    data,flag,data_valid,
+    {data[7:0],data[15:8]},flag,
     ready,
     out_data
 );
 
-//open/close file
-   integer fd1;
-   integer err1;
-initial begin
-  if(ready ==1 ) begin 
-        integer k;
-        fd1 = $fopen("E:/cannydata.txt", "w");   
-        err1 = $ferror(fd1, str1);   
-        for(k=0; k<504*632-1; k=k+1) begin 
-            $fdisplay(fd1, "New data1: %d", out_data); 
-            #20;     
-        end 
-        $fclose(fd1);
-      end
-end
+////open/close file
+//   integer fd1;
+//   integer err1;
+//initial begin
+//  if(ready ==1 ) begin 
+//        integer k;
+//        fd1 = $fopen("E:/cannydata.txt", "w");   
+//        err1 = $ferror(fd1, str1);   
+//        for(k=0; k<504*632-1; k=k+1) begin 
+//            $fdisplay(fd1, "New data1: %d", out_data); 
+//            #20;     
+//        end 
+//        $fclose(fd1);
+//      end
+//end
 
 endmodule
