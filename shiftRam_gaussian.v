@@ -2,8 +2,8 @@
 
 // define  row num = WIDTH   col num  = DEPTH
 module Shift_RAM_3X3_gaussian#(
-    parameter WIDTH  = 512,     // col lenth of the image
-	parameter DEPTH = 640,		// row lenth
+    parameter WIDTH  = 640,     // col lenth of the image
+	parameter DEPTH = 512,		// row lenth
     parameter FIFO_SUM  = 2,        // FIFO nums    
     parameter KERNEL_SIZE = 3,
 	parameter DATA_WIDTH = 16
@@ -73,7 +73,7 @@ c_shift_ram_1 u2_Shift_RAM_3X3_16bit (
   .Q(row1_data)        // output wire [DATA_WIDTH - 1 : 0] Q
 );
 //-------------------------------------------
-//per_clken delay clk	
+//per_clken delay 2clk	
 reg [1:0]	per_clken_r;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
@@ -84,13 +84,14 @@ end
 wire read_clken ;
 assign read_clken = per_clken_r[1];
 
-//counts  matrix output pixel
+
+//count input pixel
 reg [19:0] count;
 always@ (posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		count <= 20'b0;
 	  end
-	else if((count == WIDTH * DEPTH + 3 ))
+	else if((count == WIDTH * DEPTH + 2 ))
 		count <= 20'b0;	
 	else if(data_en )begin 
 		count <= count + 1;
@@ -98,12 +99,13 @@ always@ (posedge clk or negedge rst_n) begin
     end
 end
 
+//count matrix output pixel
 reg [9:0]  row;
 always@ (posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		row <= 10'b0;
 	  end
-	else if((row == 10'd511))
+	else if((row == WIDTH - 1))
 		row <= 10'b0;	
 	else if(matrix_clken)begin 
 		row <= row + 1;
@@ -113,18 +115,51 @@ end
 
 
 
-// when the pixel counter is bigger then  the (delay + pixel nums),then output valid 
+//input pixel bigger than WIDTH*FIFO_SUM+KERNEL_SIZE + 2 delay clock
 assign 	matrix_clken = (count > (WIDTH*FIFO_SUM+KERNEL_SIZE - 1) + 2)?1:0;
-assign 	data_valid = (row > 509)?1:0;
+//judge the  output matrix pixel validity  
+assign 	data_valid = (row > WIDTH - KERNEL_SIZE)?1:0;
 
 reg [2:0] delay_start;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
 		delay_start <= 2'b0;
 	else 
-		delay_start <= {delay_start[1:0], data_en};	 
+		delay_start <= {delay_start[1:0], start};	 
 end
 assign ready_en = delay_start[2];
+
+// calculate the output matrix pixel row and col  
+// start counting from 0
+reg [9:0] cnt_row;      //row from 0 to 509  
+reg [9:0] cnt_col;      //col from 0 to 639
+always @(posedge clk or negedge rst_n ) begin
+    if(rst_n == 0) begin
+        cnt_col <= 10'b0;   
+    end     
+    else if(cnt_col == WIDTH - 1) begin 
+        cnt_col <= 10'b0;
+    end
+    else if(matrix_clken == 1 ) begin
+        cnt_col <= cnt_col + 1;        
+    end
+end
+
+always @(posedge clk or negedge rst_n ) begin
+    if(rst_n == 0) begin
+        cnt_row <= 10'b0;   
+    end     
+    else if(cnt_col == WIDTH - 1) begin 
+        cnt_row <=  cnt_row + 1;
+    end
+    else if((cnt_row == DEPTH) && (cnt_col == WIDTH - 1) )  begin
+        cnt_row <= 10'b0 ;        
+    end
+    else 
+        cnt_row <= cnt_row;
+end
+
+
 
 
 //---------------------------------------------------------------------

@@ -173,22 +173,48 @@ none_LocalMax_value max(
    
 );
 
-wire max_ready;
-wire ram4_ready;
+wire ram4_matrix_ready;
+wire ram4_ready_sync;
+wire thresh_valid;
 wire [15:0] thresh_mat1,thresh_mat2,thresh_mat3,thresh_mat4,thresh_mat5,thresh_mat6,thresh_mat7,thresh_mat8,thresh_mat9;
 Shift_RAM_3X3_thresh ram4(
-    clk,rst_n,
-    non_max_ready,none_max_data,
-    ram4_ready,
-    //max_ready,
-    thresh_mat1,thresh_mat2,thresh_mat3,thresh_mat4,thresh_mat5,thresh_mat6,thresh_mat7,thresh_mat8,thresh_mat9
+    .clk(clk),						
+    .rst_n(rst_n),					
+    .start(non_max_start_sync),
+    .data_en(non_max_ready),
+    //26bits
+    .per_img_Y(none_max_data),
+    //output
+    .matrix_clken(ram4_matrix_ready),
+    .data_valid(thresh_valid),
+    .ready_en(ram4_ready_sync),
+    .matrix_p11(thresh_mat1),
+    .matrix_p12(thresh_mat2),
+    .matrix_p13(thresh_mat3),
+    .matrix_p21(thresh_mat4),
+    .matrix_p22(thresh_mat5),
+    .matrix_p23(thresh_mat6),
+    .matrix_p31(thresh_mat7),
+    .matrix_p32(thresh_mat8),
+    .matrix_p33(thresh_mat9)	
 );
 doublethresh thresh(
-    clk,rst_n,
-    ram4_ready,
-   // max_ready,
-    thresh_mat1,thresh_mat2,thresh_mat3,thresh_mat4,thresh_mat5,thresh_mat6,thresh_mat7,thresh_mat8,thresh_mat9,
-    out_data,
-    ready
+    .clk(clk),       //
+    .rst_n(rst_n),       
+    .start(ram4_ready_sync),       
+    .data_valid(thresh_valid),	
+    .matrix_clken(ram4_matrix_ready),
+    .matrix_p11(thresh_mat1),
+    .matrix_p12(thresh_mat2),
+    .matrix_p13(thresh_mat3),
+    .matrix_p21(thresh_mat4),
+    .matrix_p22(thresh_mat5),
+    .matrix_p23(thresh_mat6),
+    .matrix_p31(thresh_mat7),
+    .matrix_p32(thresh_mat8),
+    .matrix_p33(thresh_mat9),  
+    .data(out_data),
+    .ready(ready)
+    
 ); 
 endmodule

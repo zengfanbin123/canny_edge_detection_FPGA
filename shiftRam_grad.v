@@ -1,6 +1,6 @@
 module Shift_RAM_3X3_grad#(
-    parameter WIDTH = 512,
-	parameter DEPTH = 638,
+    parameter WIDTH = 640,
+	parameter DEPTH = 512,
     parameter FIFO_SUM = 2,
     parameter KERNEL_SIZE = 3,
 	parameter DATA_WIDTH = 16
@@ -50,7 +50,7 @@ always@ (posedge clk or negedge rst_n) begin
 		count <= 20'b0;
 	  end
 	else begin 
-		if(count == (WIDTH* DEPTH + 2 )) begin
+		if(count == ((WIDTH - (KERNEL_SIZE - 1)) * (DEPTH - (KERNEL_SIZE - 1)) + 2 )) begin
 			count <= 20'b0;
 		end	
 		else if(data_en)begin 
@@ -81,7 +81,7 @@ wire shift_clk_en = start;
 
 //Shift_RAM_3X3_16bit1
 // IP core : shift ram
-// width :16bits  depth: 512
+// width :16bits  depth: 640
 // initial value = 16'h0000
 // synchronous setting : clear data
 c_shift_ram_1 u1_Shift_RAM_3X3_16bit (
@@ -99,7 +99,8 @@ c_shift_ram_1 u2_Shift_RAM_3X3_16bit (
   .Q(row1_data)        // output wire [DATA_WIDTH - 1 : 0] Q
 );
 // //-------------------------------------------
-////per_clken delay 3clk	
+
+////per_clken delay 1clk	
 reg per_clken_r;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
@@ -112,13 +113,13 @@ wire 	read_clken;
 assign read_clken  = per_clken_r;
 
 
-//count matrix_pixel output valid
+//count matrix_pixel output  pixel valid
 reg [9:0]  row;
 always@ (posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		row <= 10'b0;
 	  end
-	else if((row == 10'd511))
+	else if((row == WIDTH - 1))
 		row <= 10'b0;	
 	else if(matrix_clken)begin 
 		row <= row + 1;
@@ -129,7 +130,7 @@ always@ (posedge clk or negedge rst_n) begin
 end
 
 assign 	matrix_clken = (count>(WIDTH - 2)*FIFO_SUM+KERNEL_SIZE ) ?1:0;
-assign  data_valid = (row > 507 )?1:0;
+assign  data_valid = (row >(WIDTH - 2*KERNEL_SIZE + 1))?1:0;
 
 reg [1:0] delay_start;
 always @(posedge clk or negedge rst_n)begin
@@ -139,6 +140,36 @@ always @(posedge clk or negedge rst_n)begin
 		delay_start <= {delay_start[0], start};	 
 end
 assign ready_en = delay_start[1];
+
+// calculate the output matrix pixel row and col  
+// start counting from 0
+reg [9:0] cnt_row;      //row from 0 to 507  
+reg [9:0] cnt_col;      //col from 0 to 639
+always @(posedge clk or negedge rst_n ) begin
+    if(rst_n == 0) begin
+        cnt_col <= 10'b0;   
+    end     
+    else if(cnt_col == WIDTH - 1) begin 
+        cnt_col <= 10'b0;
+    end
+    else if(matrix_clken == 1 ) begin
+        cnt_col <= cnt_col + 1;        
+    end
+end
+
+always @(posedge clk or negedge rst_n ) begin
+    if(rst_n == 0) begin
+        cnt_row <= 10'b0;   
+    end     
+    else if(cnt_col == WIDTH - 1) begin 
+        cnt_row <=  cnt_row + 1;
+    end
+    else if((cnt_row == (DEPTH - (KERNEL_SIZE - 1))) && (cnt_col == WIDTH - 1) )  begin
+        cnt_row <= 10'b0 ;        
+    end
+    else 
+        cnt_row <= cnt_row;
+end
 
 
 

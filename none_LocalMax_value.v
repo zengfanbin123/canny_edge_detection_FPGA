@@ -1,6 +1,6 @@
 module none_LocalMax_value #(
   	parameter WIDTH = 512,
-	parameter DEPTH = 636,
+	parameter DEPTH = 634,
     parameter FIFO_SUM = 2,
     parameter KERNEL_SIZE = 3,
     parameter DATA_WIDTH = 26
@@ -75,9 +75,9 @@ always @(posedge clk  or negedge rst_n) begin
         finish <= 1'b0;
     end
     else if(start == 1 ) begin
-        finish <= 1'b1;
-          if( matrix_clken && (~data_valid)) begin
-            case(direct)
+            if(matrix_clken && (~data_valid)) begin
+                finish <= 1'b1;
+                case(direct)
                 N: begin
                     if((grad_p22[23:0] >= grad_p21[23:0])&&(grad_p22[23:0] >= grad_p23[23:0])) 
                         Maxvalue <= grad_p22[23:0];
@@ -102,13 +102,16 @@ always @(posedge clk  or negedge rst_n) begin
                     else 
                         Maxvalue  <= 24'b0;
                 end
-            endcase
-           
-        end 
+                endcase   
+            end
+            else  begin 
+                finish <= 1'b0;
+                Maxvalue <= 24'b0;
+            end 
     end
     else begin
         finish <= 1'b0;
-        Maxvalue <= 24'b0; 
+        Maxvalue <= 24'b0;  
     end  
 end
 
@@ -120,6 +123,7 @@ wire [15:0] data;
 //latency = 14 clock period
 //input  24bits  unfractionInterger
 //output [15:0] while valid data bits is [12:0]
+//Round mode is round of pos inf 
 cordic_sqrt grad_sqrt (
   .aclk(clk),                                        // input wire aclk
   .s_axis_cartesian_tvalid(finish),  // input wire s_axis_cartesian_tvalid
@@ -130,13 +134,13 @@ cordic_sqrt grad_sqrt (
 
 
 
-//delay finish 15 per clock
-reg [14:0] delay;
+//delay finish 14 per clock
+reg [13:0] delay;
 always @(posedge clk or negedge rst_n) begin
     if(!rst_n) 
-        delay <= 15'b0;        
+        delay <= 14'b0;        
     else 
-        delay <= {delay[13:0],finish};
+        delay <= {delay[12:0],finish};
 end
 
 //calculate the row and col data 
@@ -151,7 +155,7 @@ always @(posedge clk or negedge rst_n ) begin
     else if(cnt_row == 509 ) begin 
         cnt_row <= 10'b0;
     end
-    else if(start == 1 ) begin
+    else if( matrix_clken && (~data_valid) ) begin
         cnt_row <= cnt_row + 1;        
     end
 end
@@ -171,16 +175,18 @@ always @(posedge clk or negedge rst_n ) begin
         cnt_col <= cnt_col;
 end
 
-reg [15:0] delay_start;
+reg [14:0] delay_start;
 always @(posedge clk or negedge rst_n) begin
     if(!rst_n) 
-        delay_start <= 16'b0;        
+        delay_start <= 15'b0;        
+    else if(matrix_clken)
+        delay_start <= {delay_start[14:0],start};
     else 
-        delay_start <= {delay_start[15:0],start};
+        delay_start <= 15'b0;
 end
 
 
-assign start_sync = delay_start[15];
+assign start_sync = delay_start[14];
 assign out_data = sqrt_finish ?{3'b0,data[12:0]}:16'b0;
-assign data_en = delay[14];
+assign data_en = delay[13];
 endmodule

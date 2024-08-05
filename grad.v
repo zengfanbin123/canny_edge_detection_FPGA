@@ -17,14 +17,8 @@
     p31 p32 p33
     ]
 
-data  Data [
-    a11 a21 a31
-    a12 a22 a32
-    a13 a23 a33
-    ] 
 
-input = transpose(D) 
-and the M is the input  really
+
 */
 module Gradientfilter
 #(
@@ -55,47 +49,6 @@ module Gradientfilter
 );
 
 
-//calculate the row and col data 
-// start counting from 0
-// when the row is bigger than 511, then there are two clock period data is unvalid 
-// reg [9:0] cnt_row;      //row  from  1 to 510 is valid
-// reg [9:0] cnt_col;      //col from 1 to 638 is valid
-// reg  sign_row;          //if row == 510 sign_row = 1
-
-// always @(posedge clk or negedge rst_n ) begin
-//     if(!rst_n) begin
-//         cnt_row <= 10'b0;           
-//     end 
-//     else if(start == 1) begin 
-//         if(cnt_row == WIDTH ) begin 
-//             cnt_row <= 10'b0;
-//         end
-//         else if(matrix_clken == 1 ) begin
-//             cnt_row <= cnt_row + 1;        
-//         end
-//         else 
-//             cnt_row <= cnt_row;
-//     end      
-// end
-
-// always @(posedge clk or negedge rst_n ) begin
-//     if(rst_n == 0) begin
-//         cnt_col <= 10'b0;   
-        
-//     end     
-//     else if(cnt_row == WIDTH - 1) begin 
-//         cnt_col <=  cnt_col + 1;
-//     end
-//     else if((cnt_col == DEPTH) && (cnt_row == WIDTH ) )  begin
-//         cnt_col <= 10'b0 ;        
-//     end
-//     else 
-//         cnt_col <= cnt_col;
-// end
-//wire data_valid;
-//assign data_valid = ((cnt_row > WIDTH - KERNEL_SIZE)&&(ready==1)) ?0:1;	
-
-
 //signal of the gradient calculate finish
 //gradient of x  and y irection belongs to  [-1000,1000]
 reg x_ready,y_ready;
@@ -107,22 +60,22 @@ reg signed [15:0] x_grad;      //gradient of y direction
 //use one clock period to calculate
 always@ ( posedge clk or negedge rst_n) begin
     if(!rst_n)begin
-        x_grad <= 15'b0;
-        x_ready <= 1'b0;
+        y_grad <= 16'b0;
+        y_ready <= 1'b0;
     end
     else if(start == 1) begin
         if(matrix_clken == 1 && (~data_valid)) begin 
-            x_grad <= matrix_p31 - matrix_p11 + (matrix_p32- matrix_p12)*2 + matrix_p33 - matrix_p13;
-            x_ready <= 1'b1;
+            y_grad <= matrix_p11 - matrix_p31 + (matrix_p12- matrix_p32)*2 + matrix_p13 - matrix_p33;
+            y_ready <= 1'b1;
         end
         else begin 
-            x_ready <= 1'b0;
-            x_grad <= 15'b0;
+            y_ready <= 1'b0;
+            y_grad <= 16'b0;
         end 
     end
     else begin 
-        x_grad <= x_grad;
-        x_ready <= x_ready;
+        y_grad <= y_grad;
+        y_ready <= y_ready;
     end
 
 end
@@ -130,22 +83,22 @@ end
 //calculate the gradient of y
 always@ ( posedge clk or negedge rst_n) begin
     if(!rst_n)begin
-        y_grad <= 15'b0;
-        y_ready <= 1'b0;
+        x_grad <= 16'b0;
+        x_ready <= 1'b0;
     end
     else if(start == 1) begin
         if(matrix_clken == 1 && (~data_valid)) begin 
-            y_grad <= matrix_p11  + matrix_p31 + (matrix_p21 - matrix_p23)*2 - matrix_p13  - matrix_p33;
-            y_ready <= 1'b1;
+            x_grad <= matrix_p13  + matrix_p33 + (matrix_p23 - matrix_p21)*2 - matrix_p11  - matrix_p31;
+            x_ready <= 1'b1;
         end
         else begin 
-            y_ready <= 1'b0;
-            y_grad <= 15'b0;
+            x_ready <= 1'b0;
+            x_grad <= 16'b0;
         end 
     end
     else begin 
-        y_grad <= y_grad;
-        y_ready <= y_ready;
+        x_grad <= x_grad;
+        x_ready <= x_ready;
     end
 
 end
@@ -188,6 +141,11 @@ assign delayed_grad = delay_finish[21];
 
 
 // through the shiftRam to delay  grad_temp  21 clock period
+// c_shift_ram_2
+// IP core : shift ram
+// width :24bits  depth:22 
+// initial value = 24'b0
+// synchronous setting : clear data
 wire[23:0] grad ;
 c_shift_ram_2 delay_grad (
   .D(grad_temp),        // input wire [23 : 0] D
@@ -235,7 +193,7 @@ localparam ANGLE4 = 13'b0_0100_0000_0000;        //22.5/180 *2^13
 //judge the direction of the gradient
 //consume 2 clock period when the radian_temp input is valid
 wire [12:0] angle;
-assign angle = radian_temp[15]== 1 ? ~(radian_temp[12:0] -1):radian_temp[12:0] ;
+assign angle = radian_cal_finish ?radian_temp[15]== 1 ? ~(radian_temp[12:0] -1):radian_temp[12:0]:13'b0;
 
 
 reg [1:0] direct;       //direction of gradient
@@ -249,7 +207,7 @@ always @(posedge clk or negedge rst_n) begin
         direct_en <= 1'b1;
         //negative theta belongs to three or four quadrant
         if(radian_temp[15] == 1) begin  
-            if(((13'b0 <= angle))&&((angle < ANGLE4))||(angle > ANGLE1))
+            if(((13'b0 <= angle))&&((angle < ANGLE4))||(angle >= ANGLE1))
                 direct <= E;
             else if((ANGLE4 <= angle)&&(angle < ANGLE3))
                 direct <= NW;
@@ -260,7 +218,7 @@ always @(posedge clk or negedge rst_n) begin
         end
         //positive theta belongs to one or two quadrant
         else begin 
-            if(((13'b0 <= angle)&&(angle < ANGLE4))||(angle > ANGLE1))
+            if(((13'b0 <= angle)&&(angle < ANGLE4))||(angle >= ANGLE1))
                 direct <= E;
             else if((ANGLE4 <= angle)&&(angle < ANGLE3))
                 direct <= NE;

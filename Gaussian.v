@@ -10,8 +10,8 @@
 //latency  = 2*clock period
 
 module Gaussianfilter#(
-    parameter WIDTH  = 512,     // col lenth of the image
-	parameter DEPTH = 640,		// row lenth
+    parameter WIDTH  = 640,     // col lenth of the image
+	parameter DEPTH = 512,		// row lenth
     parameter FIFO_SUM  = 2,        // FIFO nums    
     parameter KERNEL_SIZE = 3,
 	parameter DATA_WIDTH = 16
@@ -40,42 +40,6 @@ module Gaussianfilter#(
     output  reg [DATA_WIDTH - 1:0] filter_Data      //the filter data
 );
 
-
-// //calculate the row and col data 
-// // start counting from 0
-// // when the row is bigger than 511, then there are two clock period data is unvalid 
-// reg [9:0] cnt_row;      //row  from  1 to 510 is valid
-// reg [9:0] cnt_col;      //col from 1 to 638 is valid
-// always @(posedge clk or negedge rst_n ) begin
-//     if(rst_n == 0) begin
-//         cnt_row <= 10'b0;          
-//     end     
-//     else if(cnt_row == WIDTH - 1) begin 
-//         cnt_row <= 10'b0;
-//     end
-//     else if(matrix_clken == 1 && (~data_valid)) begin
-//         cnt_row <= cnt_row + 1;        
-//     end
-// end
-
-// always @(posedge clk or negedge rst_n ) begin
-//     if(rst_n == 0) begin
-//         cnt_col <= 10'b0;   
-        
-//     end     
-//     else if(cnt_row == WIDTH - 1) begin 
-//         cnt_col <=  cnt_col + 1;
-//     end
-//     else if((cnt_col == DEPTH) &&(cnt_row == WIDTH - 1) )  begin
-//         cnt_col <= 10'b0 ;        
-//     end
-//     else 
-//         cnt_col <= cnt_col;
-// end
-// //wire data_valid; 
-// //assign data_valid = ((cnt_row > WIDTH - KERNEL_SIZE)&&(ready==1)) ? 0 : 1;
-
-
 reg  [19:0]  temp;
 reg cal_finish;
 //delay one clock period
@@ -85,14 +49,20 @@ always @(posedge clk or negedge rst_n) begin
         temp <= 20'b0;
         cal_finish <= 1'b0;
     end
-    else if( matrix_clken&&(~data_valid) )begin 
-            temp <= matrix_p11 + matrix_p12*2 + matrix_p13 +matrix_p21*2 + matrix_p22*4 + matrix_p23*2 + matrix_p31 + matrix_p32*2 + matrix_p33;
-            cal_finish <= 1'b1;
+    else if (start == 1 ) begin
+        if( matrix_clken&&(~data_valid) )begin 
+                temp <= matrix_p11 + matrix_p12*2 + matrix_p13 +matrix_p21*2 + matrix_p22*4 + matrix_p23*2 + matrix_p31 + matrix_p32*2 + matrix_p33;
+                cal_finish <= 1'b1;
+        end
+        else begin
+            cal_finish <= 1'b0;
+            temp <= 20'b0;
+        end
     end
     else begin
-        cal_finish <= 1'b0;
-        temp <= 20'b0;
-    end
+            cal_finish <= 1'b0;
+            temp <= 20'b0;
+        end
 end
 
 //delay one clock period
@@ -115,18 +85,18 @@ end
 
 
 
-reg [1:0] count;
+reg [1:0] delay_start;
 always @(posedge clk or negedge rst_n ) begin
     if(!rst_n ) begin 
-        count <= 2'b0;
+        delay_start <= 2'b0;
     end        
     else begin 
-        count <= {count[0],matrix_clken}; 
+        delay_start <= {delay_start[0],start}; 
     end
   
 end
 
-assign start_sync = count[1];
+assign start_sync = delay_start[1];
 assign ready = en_ready == 1? 1:0;
 
 
