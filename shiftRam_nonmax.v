@@ -1,6 +1,6 @@
 module Shift_RAM_3X3_NO_MAX#(
-  	parameter WIDTH = 640,
-	parameter DEPTH = 512,
+  	parameter WIDTH = 636,
+	parameter DEPTH = 508,
     parameter FIFO_SUM = 2,
     parameter KERNEL_SIZE = 3,
 	parameter DATA_WIDTH = 26
@@ -36,7 +36,7 @@ always@ (posedge clk or negedge rst_n) begin
 		count <= 20'b0;
 	  end
 	else begin 
-		if(count == ((WIDTH - 2*(KERNEL_SIZE - 1)) * (DEPTH - 2*(KERNEL_SIZE - 1)) + 2  )) begin
+		if(count == (WIDTH * DEPTH + 2)) begin
 			count <= 20'b0;
 		end	
 		else if(data_en)begin 
@@ -48,22 +48,42 @@ always@ (posedge clk or negedge rst_n) begin
 end
 
 
-//----------------------------------------------
-//consume 1clk
 wire 	[DATA_WIDTH - 1:0] 	row1_data;//frame data of the 1th row
 wire 	[DATA_WIDTH - 1:0]	row2_data;//frame data of the 2th row
 reg 	[DATA_WIDTH - 1:0] 	row3_data;//frame data of the 3th row
+reg 	[DATA_WIDTH - 1:0] 	row2_temp;//delay the 2th row data 1 clk
 
+//delay input data 1 clk period 
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n)  begin
+		row3_data <= 16'hffff;
+		row2_temp <= 16'hffff;
+	end
+	else if(start)begin
+		if(data_en) begin
+			row3_data <= per_img_Y;
+			row2_temp <= row2_data;
+		end
+		else begin
+			row3_data <= row3_data;
+			row2_temp <= row2_temp;
+		end
+	end
+	else begin
+		row3_data <= 16'b0;
+		row2_temp <= 16'hffff;
+	end
+end
+
+//delay data_en 
+reg data_en_delay;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
-		row3_data <= 26'b0;
-	else begin
-		if(start)
-			row3_data <= per_img_Y;
-		else
-			row3_data <= row3_data;
-		end
+		data_en_delay <= 1'b0;
+	else 
+		data_en_delay <= data_en;
 end
+
 	
 
 //debug for data
@@ -90,11 +110,11 @@ assign grad9 = {matrix_p33[23:0]};
 
 //----------------------------------------------------------
 //module of shift ram for row data
-wire	shift_clk_en = start;
+wire	shift_clk_en = data_en_delay;
 
 //Shift_RAM_3X3_16bit1
 // IP core : shift ram
-// width :26bits  depth: 512
+// width :26bits  depth: 636
 // initial value = 26'b0
 // synchronous setting : clear data
 shift_ram_508 u1_Shift_RAM_3X3_26bit (
@@ -106,34 +126,15 @@ shift_ram_508 u1_Shift_RAM_3X3_26bit (
 
 //Shift_RAM_3X3_16bit2
 shift_ram_508 u2_Shift_RAM_3X3_26bit (
-  .D(row2_data),        // input wire [25 : 0] D
+  .D(row2_temp),        // input wire [25 : 0] D
   .CLK(clk&shift_clk_en),    // input wire CLK
   .SCLR(~rst_n),  // input wire SCLR
   .Q(row1_data)        // output wire [25 : 0] Q
 );
 //-------------------------------------------
-// //per_clken delay 3clk	
-// reg 	[1:0]	per_clken_r;
-// always @(posedge clk or negedge rst_n)begin
-// 	if(!rst_n)
-// 		per_clken_r <= 2'b0;
-// 	else 
-// 		per_clken_r <= {per_clken_r[0], per_clken};	 
-// end
 
-//delay matrix shift sign 
-reg per_clken_r;
-always @(posedge clk or negedge rst_n)begin
-	if(!rst_n)
-		per_clken_r <= 1'b0;
-	else 
-		per_clken_r <=  start;	 
-end
- 
-wire 	read_clken;
-assign read_clken  = per_clken_r;
 
-//count matrix_pixel output valid
+//count valid output 
 reg [9:0]  row;
 always@ (posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
@@ -141,7 +142,7 @@ always@ (posedge clk or negedge rst_n) begin
 	  end
 	else if((row == WIDTH - 1))
 		row <= 10'b0;	
-	else if(matrix_clken)begin 
+	else if(matrix_clken && data_en_delay)begin 
 		row <= row + 1;
 		//matrix_clken <= 1'b0;	 
     end
@@ -150,8 +151,8 @@ always@ (posedge clk or negedge rst_n) begin
 end
 
 
-assign 	matrix_clken = (count>(WIDTH-2 * (KERNEL_SIZE - 1))*FIFO_SUM+KERNEL_SIZE )?1:0;
-assign  data_valid = (row > (WIDTH - KERNEL_SIZE *3  + 1 ))?1:0;
+assign 	matrix_clken = (count>(WIDTH * FIFO_SUM + KERNEL_SIZE - 1))?1:0;
+assign  data_valid = (row > (WIDTH - KERNEL_SIZE  ))?1:0;
 
 reg [1:0] delay_start;
 always @(posedge clk or negedge rst_n)begin
@@ -175,7 +176,7 @@ always @(posedge clk or negedge rst_n ) begin
     else if(cnt_col == WIDTH - 1) begin 
         cnt_col <= 10'b0;
     end
-    else if(matrix_clken == 1 ) begin
+    else if(matrix_clken && data_en) begin
         cnt_col <= cnt_col + 1;        
     end
 end
@@ -210,10 +211,10 @@ always @(posedge clk or negedge rst_n)begin
         {matrix_p31, matrix_p32, matrix_p33} <= 78'h0;
 	end
 //	else if(read_frame_href)begin
-	else if(read_clken )begin//shift_RAM data read clock enbale 
+	else if(data_en)begin//shift_RAM data read clock enbale 
 			{matrix_p11, matrix_p12, matrix_p13} <= {matrix_p12, matrix_p13, row1_data};//1th shift input
 			{matrix_p21, matrix_p22, matrix_p23} <= {matrix_p22, matrix_p23, row2_data};//2th shift input 
-			{matrix_p31, matrix_p32, matrix_p33} <= {matrix_p32, matrix_p33, row3_data};//3th shift input 
+			{matrix_p31, matrix_p32, matrix_p33} <= {matrix_p32, matrix_p33, per_img_Y};//3th shift input 
 		end
 	else begin
 		{matrix_p11, matrix_p12, matrix_p13} <= {matrix_p11, matrix_p12, matrix_p13};

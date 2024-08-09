@@ -1,79 +1,96 @@
 /* PADDING.v */
-module PADDING
+module Padding_Col
 #(
 	parameter DATA_WIDTH = 16,
-	parameter FMAP_SIZE = 28,
-	parameter N = 1
+	parameter WIDTH = 634,
+	//parameter DEPTH = 506,
+	parameter N = 3
 )
 (
-	input clk,
-	input rst_n,
-	input ena,
-	input clear,
-	input [DATA_WIDTH-1:0]fmap_raw,
-	output [DATA_WIDTH-1:0]fmap_pad,
-	output rd_en,
-	output valid,
-	output done
+	input 		clk,
+	input 		rst_n,
+	input 		start,		//start
+	input 		data_en,		//~start
+	input  		[DATA_WIDTH-1:0]		fmap_raw,
+	output 		[DATA_WIDTH-1:0]		fmap_pad,
+	output 		start_sync,
+	output 		data_en_sync
+	
 );
+localparam pad_len = N;
+//delay input padding lenth period
+reg [DATA_WIDTH * pad_len - 1:0] delay_data;
+reg [N : 0] start_delay; 
+//reg [9:0] cnt;
+reg [9:0] cnt_col;
+//reg [LINE_CNT_ROW_BIT_NUM-1:0]cnt_row;
 
-	//calculate the  data bits 
-	function integer clogb2 (input integer bit_depth);
-	begin
-		for(clogb2=0; bit_depth>0; clogb2=clogb2+1)
-		bit_depth = bit_depth >> 1;
+
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		delay_data <= 16'b0;
 	end
-	endfunction
+	else if(pad_len > 1) begin
+		if(start && cnt_col < WIDTH + pad_len - 1) begin 
+			delay_data <= {delay_data[DATA_WIDTH * (pad_len - 1):0],fmap_raw};
+		end
+		else 
+			delay_data <= 16'h0;
+	end
+	else begin
+		if(start && cnt_col < WIDTH + pad_len - 1) begin 
+			delay_data <=  fmap_raw ;
+		end
+		else 
+			delay_data <= 16'h0;
+	end
+	 
+end 
+
+//delay start  
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		start_delay <= 1'b0;
+	end
+	else 
+		start_delay <= {start_delay[N-1:0],start};
+end 
+wire start_delay_en ;
+assign start_delay_en =  N > 1 ? start_delay[N]: start_delay;
+
+
+//count all data 
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		cnt_col <= 0;
+	end
+	else if(start||start_delay) begin
+		if(cnt_col  == WIDTH + 2 * pad_len - 1 + 80)
+			cnt_col <= 10'b0;
+		else 
+			cnt_col <= cnt_col + 1;
+	end
+	else
+		cnt_col <= 10'b0;
+end
+
+// always @(posedge clk or negedge rst_n) begin
+// 	if(!rst_n) begin
+// 		cnt <= 0;
+// 	end
+// 	else if(start) begin
+// 		if(cnt  == WIDTH + 2 * pad_len - 1 + 80)
+// 			cnt <= 10'b0;
+// 		else 
+// 			cnt <= cnt + 1;
+// 	end
+// 	else
+// 		cnt_col <= 10'b0;
+// end
+
 	
-	localparam CNT_BIT_NUM = clogb2((FMAP_SIZE+N*2)*(FMAP_SIZE+N*2));
-	localparam LINE_CNT_BIT_NUM = clogb2(FMAP_SIZE+N*2);
-	
-	reg [CNT_BIT_NUM-1:0]cnt;
-	reg [LINE_CNT_BIT_NUM-1:0]cnt_col;
-	reg [LINE_CNT_BIT_NUM-1:0]cnt_row;
-	
-	assign valid = (ena) ? ((cnt < (FMAP_SIZE + N * 2) * (FMAP_SIZE + N * 2) - 1) ? 1 : 0) : 0;
-	assign done = (ena) ? ((cnt == (FMAP_SIZE + N * 2) * (FMAP_SIZE + N * 2) - 1) ? 1 : 0) : 0;
-	assign fmap_pad = (!ena || cnt_row < N  || cnt_row > FMAP_SIZE + N - 1) ? 0 : ((cnt_col < N || cnt_col > FMAP_SIZE + N - 1) ? 0 : fmap_raw);
-	
-	//conditional generate
-	generate 
-		if(N != 0) begin: no_padding
-			assign rd_en = (!ena || cnt_row < N|| cnt_row > FMAP_SIZE + N - 1) ? 0 : ((cnt_col < N - 1 || cnt_col > FMAP_SIZE + N - 2) ? 0 : 1);
-		end
-		else begin: padding
-			assign rd_en = (ena) ? 1 : 0;
-		end
-	endgenerate
-	
-	always @(posedge clk or negedge rst_n)
-		if(!rst_n)
-			cnt <= 0;
-		else if(clear)
-			cnt <= 0;
-		else if(ena) begin
-			if(cnt == (FMAP_SIZE + N * 2) * (FMAP_SIZE + N * 2) - 1) 
-				cnt <= 0;
-			else
-				cnt <= cnt + 1;
-		end
-		
-	always @(posedge clk or negedge rst_n)
-		if(!rst_n) begin
-			cnt_col <= 0;
-			cnt_row <= 0;
-		end
-		else if(clear) begin
-			cnt_col <= 0;
-			cnt_row <= 0;	
-		end
-		else if(ena) begin
-			if (cnt_col >= FMAP_SIZE + N * 2 - 1) begin
-				cnt_col <= 0;
-				cnt_row <= cnt_row + 1;
-			end
-			else 
-				cnt_col <= cnt_col + 1;
-		end
-				
+
+assign  fmap_pad = (cnt_col < pad_len && start_sync? 16'b0 : cnt_col > WIDTH + pad_len - 1 ? 16'b0 : delay_data [DATA_WIDTH * pad_len - 1: DATA_WIDTH * (pad_len -1)]);
+assign 	start_sync = start||start_delay_en;
+assign  data_en_sync = cnt_col < ( WIDTH + 2 * pad_len ) && start_sync ?1:0;
 endmodule

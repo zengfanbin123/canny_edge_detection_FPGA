@@ -241,9 +241,9 @@ reg [23:0] delay_start;
      if(!rst_n) begin  
         delay_start <= 24'b0;
      end
-     else begin
-        delay_start <= {delay_start[22:0],matrix_clken};
-     end    
+     else if(matrix_clken)begin
+        delay_start <= {delay_start[22:0],start};
+     end
  end
 
 assign ready_sync = delay_start[23];

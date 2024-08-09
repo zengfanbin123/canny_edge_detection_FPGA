@@ -37,22 +37,42 @@ module Shift_RAM_3X3_gaussian#(
 wire 	[DATA_WIDTH - 1:0] 	row1_data;//frame data of the 1th row
 wire 	[DATA_WIDTH - 1:0]	row2_data;//frame data of the 2th row
 reg 	[DATA_WIDTH - 1:0] 	row3_data;//frame data of the 3th row
+reg 	[DATA_WIDTH - 1:0] 	row2_temp;
 
-
+//delay input data 1 clk period 　
+always @(posedge clk or negedge rst_n) begin
+	if(!rst_n)  begin
+		row3_data <= 16'hffff;
+		row2_temp <= 16'hffff;
+	end
+	else if(start)begin
+		if(data_en) begin
+			row3_data <= per_img_Y;
+			row2_temp <= row2_data;
+		end
+		else begin
+			row3_data <= row3_data;
+			row2_temp <= row2_temp;
+		end
+	end
+	else begin
+		row3_data <= 16'b0;
+		row2_temp <= 16'hffff;
+	end
+end
+//delay data_en 
+reg data_en_delay;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
-		row3_data <= 16'b0;
-	else begin
-		if(start)
-			row3_data <= per_img_Y;
-		else
-			row3_data <= row3_data;
-		end
+		data_en_delay <= 1'b0;
+	else 
+		data_en_delay <= data_en;
 end
+
 
 //----------------------------------------------------------
 //module of shift ram for row data
-wire	shift_clk_en = data_en;
+wire	shift_clk_en = data_en_delay;
 //Shift_RAM_3X3_16bit1
 // IP core : shift ram
 // width :16bits  depth: 512
@@ -65,24 +85,18 @@ c_shift_ram_1 u1_Shift_RAM_3X3_16bit (
   .Q(row2_data)        // output wire [DATA_WIDTH - 1 : 0] Q
 );
 
+
 //Shift_RAM_3X3_16bit2
 c_shift_ram_1 u2_Shift_RAM_3X3_16bit (
-  .D(row2_data),        // input wire [DATA_WIDTH - 1 : 0] D
+  .D(row2_temp),        // input wire [DATA_WIDTH - 1 : 0] D
   .CLK(clk&shift_clk_en),    // input wire CLK
   .SCLR(~rst_n),  // input wire SCLR
   .Q(row1_data)        // output wire [DATA_WIDTH - 1 : 0] Q
 );
 //-------------------------------------------
-//per_clken delay 2clk	
-reg [1:0]	per_clken_r;
-always @(posedge clk or negedge rst_n)begin
-	if(!rst_n)
-		per_clken_r <= 2'b0;
-	else 
-		per_clken_r <= {per_clken_r[0], data_en};	 
-end
+
 wire read_clken ;
-assign read_clken = per_clken_r[1];
+assign read_clken = data_en_delay;
 
 
 //count input pixel
@@ -107,27 +121,28 @@ always@ (posedge clk or negedge rst_n) begin
 	  end
 	else if((row == WIDTH - 1))
 		row <= 10'b0;	
-	else if(matrix_clken)begin 
+	else if(matrix_clken && data_en_delay)begin 
 		row <= row + 1;
 		//matrix_clken <= 1'b0;	 
     end
+	else 
+		row <= 10'b0;
 end
 
 
-
 //input pixel bigger than WIDTH*FIFO_SUM+KERNEL_SIZE + 2 delay clock
-assign 	matrix_clken = (count > (WIDTH*FIFO_SUM+KERNEL_SIZE - 1) + 2)?1:0;
+assign 	matrix_clken = (count > (WIDTH*FIFO_SUM+KERNEL_SIZE - 1) )?1:0;
 //judge the  output matrix pixel validity  
 assign 	data_valid = (row > WIDTH - KERNEL_SIZE)?1:0;
 
-reg [2:0] delay_start;
+reg [1:0] delay_start;
 always @(posedge clk or negedge rst_n)begin
 	if(!rst_n)
 		delay_start <= 2'b0;
 	else 
-		delay_start <= {delay_start[1:0], start};	 
+		delay_start <= {delay_start[0], start};	 
 end
-assign ready_en = delay_start[2];
+assign ready_en = delay_start[1];
 
 // calculate the output matrix pixel row and col  
 // start counting from 0
@@ -140,7 +155,7 @@ always @(posedge clk or negedge rst_n ) begin
     else if(cnt_col == WIDTH - 1) begin 
         cnt_col <= 10'b0;
     end
-    else if(matrix_clken == 1 ) begin
+    else if(matrix_clken && data_en_delay ) begin
         cnt_col <= cnt_col + 1;        
     end
 end
@@ -178,10 +193,10 @@ always @(posedge clk or negedge rst_n)begin
         {matrix_p31, matrix_p32, matrix_p33} <= 48'h0;
 	end
 //	else if(read_frame_href)begin
-	else if(read_clken)begin//shift_RAM data read clock enbale 
+	else if(data_en)begin//shift_RAM data read clock enbale 
 			{matrix_p11, matrix_p12, matrix_p13} <= {matrix_p12, matrix_p13, row1_data};//1th shift input
 			{matrix_p21, matrix_p22, matrix_p23} <= {matrix_p22, matrix_p23, row2_data};//2th shift input 
-			{matrix_p31, matrix_p32, matrix_p33} <= {matrix_p32, matrix_p33, row3_data};//3th shift input 
+			{matrix_p31, matrix_p32, matrix_p33} <= {matrix_p32, matrix_p33, per_img_Y};//3th shift input 
 		end
 	else begin
 		{matrix_p11, matrix_p12, matrix_p13} <= {matrix_p11, matrix_p12, matrix_p13};

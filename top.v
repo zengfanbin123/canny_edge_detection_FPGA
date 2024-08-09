@@ -1,10 +1,14 @@
-module top (
+module canny_edge_detection (
     input clk,
     input rst_n,
+    input b_fval,       //frame valid signal 0 is valid ,and  1  is invalid 
+    input b_lval,       //row valid signal  0 is valid ,and  1  is invalid   80 invalid data + 640 valid data 
     input [15:0]  in_data,
-    input enable,
-    output ready,
+
+    output b_fval_sync,
+    output b_lval_sync,
     output [15:0] out_data
+
     
 );
 //gaussian filter data
@@ -28,8 +32,8 @@ Shift_RAM_3X3_gaussian ram (
     //input 
     .clk(clk),  						
     .rst_n(rst_n),
-    .start(enable),   
-    .data_en(enable),		
+    .start(b_fval),   
+    .data_en(b_lval),		
     .per_img_Y(in_data),	
     .matrix_clken(gauss_matrix_ready),
      
@@ -151,7 +155,7 @@ Shift_RAM_3X3_NO_MAX ram3(
 wire [15:0]  none_max_data;
 wire non_max_ready;
 wire non_max_start_sync;
-none_LocalMax_value max(
+non_LocalMax_value max(
     .clk(clk),   
     .rst_n(rst_n), 
     .start(nomax_ram_ready_sync),   
@@ -214,7 +218,7 @@ doublethresh thresh(
     .matrix_p32(thresh_mat8),
     .matrix_p33(thresh_mat9),  
     .data(out_data),
-    .ready(ready)
-    
+    .start_sync(b_fval_sync),
+    .data_en_sync(b_lval_sync)
 ); 
 endmodule
