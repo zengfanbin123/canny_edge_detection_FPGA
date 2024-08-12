@@ -49,7 +49,7 @@ always @(posedge clk or negedge rst_n) begin
         temp <= 20'b0;
         cal_finish <= 1'b0;
     end
-    else if (start == 1 ) begin
+    else if (start == 1  ) begin
         if( matrix_clken&&(~data_valid) )begin 
                 temp <= matrix_p11 + matrix_p12*2 + matrix_p13 +matrix_p21*2 + matrix_p22*4 + matrix_p23*2 + matrix_p31 + matrix_p32*2 + matrix_p33;
                 cal_finish <= 1'b1;
@@ -73,9 +73,16 @@ always @(posedge clk or negedge rst_n ) begin
         filter_Data <= 16'b0;
         en_ready <= 1'b0;
     end
-    else if (start && cal_finish)begin
-        filter_Data <= temp[19:4];
-        en_ready <= 1'b1;
+    else if (start)begin
+        if(cal_finish) begin
+            filter_Data <= temp[19:4];
+            en_ready <= 1'b1;
+        end
+        else begin 
+            en_ready <= 1'b0;
+            filter_Data <= 16'b0;
+    end
+
     end
     else begin 
         en_ready <= 1'b0;

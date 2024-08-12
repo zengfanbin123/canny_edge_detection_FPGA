@@ -18,7 +18,6 @@
     ]
 
 
-
 */
 module Gradientfilter
 #(
@@ -48,16 +47,21 @@ module Gradientfilter
     output  [25:0]  grad_square        //  [25:24]represens direction [23:0]represnts gradient size  (x^2 + y^2) 
 );
 
+//----------------------------------------------------------
+//pipeline of  the gradient
+//use one clock period to calculate x_grad ,y_grad
+// the grad_temp is delay the matrix_en 2 clock
+
+
+
 
 //signal of the gradient calculate finish
 //gradient of x  and y irection belongs to  [-1000,1000]
 reg x_ready,y_ready;
 reg signed [15:0] y_grad;      //gradient of x direction  1bit of sign and  17bits of data 
 reg signed [15:0] x_grad;      //gradient of y direction 
-//wire [1:0] sign_x_y;        //low bit represent the x_gradident sign ,high bit represent the y_gradient sign
-//calculate the gradient of x
 
-//use one clock period to calculate
+//calculate the gradient of x
 always@ ( posedge clk or negedge rst_n) begin
     if(!rst_n)begin
         y_grad <= 16'b0;
@@ -74,12 +78,10 @@ always@ ( posedge clk or negedge rst_n) begin
         end 
     end
     else begin 
-        y_grad <= y_grad;
-        y_ready <= y_ready;
+        y_ready <= 1'b0;
+        y_grad <= 16'b0;
     end
-
 end
-
 //calculate the gradient of y
 always@ ( posedge clk or negedge rst_n) begin
     if(!rst_n)begin
@@ -91,34 +93,38 @@ always@ ( posedge clk or negedge rst_n) begin
             x_grad <= matrix_p13  + matrix_p33 + (matrix_p23 - matrix_p21)*2 - matrix_p11  - matrix_p31;
             x_ready <= 1'b1;
         end
-        else begin 
+        else begin  
             x_ready <= 1'b0;
             x_grad <= 16'b0;
         end 
     end
     else begin 
-        x_grad <= x_grad;
-        x_ready <= x_ready;
+        x_ready <= 1'b0;
+        x_grad <= 16'b0;
     end
-
 end
-//calculate the square of the gradient
-wire [23:0] x_square,y_square;
 
+wire [23:0] x_square,y_square;
 assign x_square = x_grad[15] ? (-x_grad) * (-x_grad):x_grad * x_grad ; 
 assign y_square = y_grad[15] ? (-y_grad) * (-y_grad):y_grad * y_grad ;
 
-
-reg[23:0]grad_temp;
+//calculate the grad
+reg [23:0] grad_temp;
 reg grad_finish;
 always @(posedge clk or negedge rst_n) begin
     if(! rst_n ) begin
         grad_temp <= 24'b0;
         grad_finish <= 1'b0;
     end
-    else if((x_ready )&&(y_ready ))begin
-        grad_temp <= x_square + y_square;
-        grad_finish <= 1'b1;
+    else if(start) begin
+        if(y_ready && x_ready) begin 
+            grad_temp <= x_square + y_square;
+            grad_finish <= 1'b1;
+        end
+        else begin
+            grad_temp <= 24'b0;
+            grad_finish <= 1'b0;
+        end
     end
     else begin
         grad_temp <= 24'b0;
@@ -126,21 +132,7 @@ always @(posedge clk or negedge rst_n) begin
     end 
 end
 
-
-//delay grad_finish signal 
-reg [21:0] delay_finish;
-always @(posedge clk or negedge rst_n) begin
-    if(! rst_n ) begin
-        delay_finish <= 21'b0;
-    end
-    else 
-        delay_finish <= {delay_finish[20:0],grad_finish}; 
-end
-wire delayed_grad;
-assign delayed_grad = delay_finish[21];
-
-
-// through the shiftRam to delay  grad_temp  21 clock period
+// through the shiftRam to delay  grad_temp  22 clock period
 // c_shift_ram_2
 // IP core : shift ram
 // width :24bits  depth:22 
@@ -154,14 +146,40 @@ c_shift_ram_2 delay_grad (
   .Q(grad)        // output wire [23 : 0] Q
 );
 
+//delay grad_finish signal 
+reg [21:0] delay_finish;
+always @(posedge clk or negedge rst_n) begin
+    if(! rst_n ) begin
+        delay_finish <= 22'b0;
+    end
+    else 
+        delay_finish <= {delay_finish[20:0],grad_finish}; 
+end
+wire delayed_grad;
+assign delayed_grad = delay_finish[21];
 
+
+
+//---------------------------------------------------------------------------------------
+//calculate the direct 
+// the pipeline of calculate the gradient uses 24  clock
+
+
+//delay the matrix_clk_en
+reg [22:0] delay_matrix;
+always @(posedge clk or negedge rst_n) begin
+    if(! rst_n ) begin
+        delay_matrix <= 23'b0;
+    end
+    else 
+        delay_matrix <= {delay_matrix[21:0],matrix_clken}; 
+end
 
 //calculate the angle for gradient ,which will delay 22 clock period contrast to the  x_grad and y_grad 
 wire radian_cal_begin;
-assign radian_cal_begin = x_ready && y_ready;
+assign radian_cal_begin = x_ready && y_ready ;
 wire  radian_cal_finish;
 wire  [15:0]  radian_temp;
-
 
 //latency = 22 clock period
 // input require : two bits interge fiexed Fraction   
@@ -235,19 +253,22 @@ always @(posedge clk or negedge rst_n) begin
 end
 
 
+
+
+//--------------------------------------------------
+//synchronous start sign
+
+
 //delay the start sync sign
 reg [23:0] delay_start;
  always @(posedge clk or negedge rst_n) begin
      if(!rst_n) begin  
         delay_start <= 24'b0;
-     end
-     else if(matrix_clken)begin
+     end else 
         delay_start <= {delay_start[22:0],start};
-     end
  end
 
 assign ready_sync = delay_start[23];
-
-assign grad_square =  direct_en&&delayed_grad ? {direct,grad}: 26'b0 ;
-assign data_en = direct_en&&delayed_grad == 1 ? 1 : 0;
+assign grad_square =  direct_en && delayed_grad ? {direct,grad}: 26'b0 ;
+assign data_en = direct_en && delayed_grad == 1 ? 1 : 0;
 endmodule

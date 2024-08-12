@@ -61,51 +61,49 @@ always @(posedge clk ) begin
     end
 end
 
-//delay en_data 1 clock period
+//delay start 1 clock period
 reg delay;
 always @(posedge clk or negedge rst_n) begin
     if(!rst_n)
         delay <= 1'b0;
-    else if(matrix_clken)
+    else 
         delay <= start;
-    else 
-        delay <= 1'b0;
 end
 
-reg [9:0] cnt_row;      //row  from  1 to 510 is valid
-reg [9:0] cnt_col;      //col from 1 to 638 is valid
-always @(posedge clk or negedge rst_n ) begin
-    if(rst_n == 0) begin
-        cnt_col <= 10'b0;     
-    end  
-    else if (start_sync) begin 
-        if(cnt_col == WIDTH - 1 ) begin 
-            cnt_col <= 10'b0;
-        end
-        else if( data_en_sync ) begin
-            cnt_col <= cnt_col + 1;        
-        end
-        else 
-            cnt_col <= cnt_col;
-    end   
-    else 
-        cnt_col <= 10'b0;
-end
+// reg [9:0] cnt_row;      //row  from  1 to 510 is valid
+// reg [9:0] cnt_col;      //col from 1 to 638 is valid
+// always @(posedge clk or negedge rst_n ) begin
+//     if(rst_n == 0) begin
+//         cnt_col <= 10'b0;     
+//     end  
+//     else if (start_sync) begin 
+//         if(cnt_col == WIDTH - 1 ) begin 
+//             cnt_col <= 10'b0;
+//         end
+//         else if( data_en_sync ) begin
+//             cnt_col <= cnt_col + 1;        
+//         end
+//         else 
+//             cnt_col <= cnt_col;
+//     end   
+//     else 
+//         cnt_col <= 10'b0;
+// end
 
-always @(posedge clk or negedge rst_n ) begin
-    if(rst_n == 0) begin
-        cnt_row <= 10'b0;   
+// always @(posedge clk or negedge rst_n ) begin
+//     if(rst_n == 0) begin
+//         cnt_row <= 10'b0;   
         
-    end     
-    else if((cnt_col == WIDTH -1) && data_en_sync ) begin 
-        cnt_row <=  cnt_row + 1;
-    end
-    else if((cnt_row == DEPTH) && (cnt_col == WIDTH ) )  begin
-        cnt_row <= 10'b0 ;        
-    end
-    else 
-        cnt_row <= cnt_row;
-end
+//     end     
+//     else if((cnt_col == WIDTH -1) && data_en_sync ) begin 
+//         cnt_row <=  cnt_row + 1;
+//     end
+//     else if((cnt_row == DEPTH) && (cnt_col == WIDTH ) )  begin
+//         cnt_row <= 10'b0 ;        
+//     end
+//     else 
+//         cnt_row <= cnt_row;
+// end
 
 
 wire pad_data_sync,pad_start_sync;
@@ -119,6 +117,7 @@ Padding_Col #(
     .rst_n(rst_n),
     .start(delay),		
     .data_en(en_data),
+    .matrix_clken(matrix_clken),
     .fmap_raw(temp_data),
     .fmap_pad(padding_data),
     .start_sync(pad_start_sync),	
@@ -137,7 +136,7 @@ Padding_Row #(
     .rst_n(rst_n),
     .start(pad_start_sync),		
     .data_en(pad_data_sync),
-    .delay_start(matrix_clken),
+    .matrix_clken(matrix_clken),
     .fmap_raw(padding_data),
     .fmap_pad(row_padding),
     .start_sync(row_pad_start_sync),	
